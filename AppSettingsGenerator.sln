@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppSettingsGenerator", "AppSettingsGenerator\AppSettingsGenerator.csproj", "{97B4DE17-B6E8-4641-846B-20D219AB4DE8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppSettingsGeneratorUnitTest", "AppSettingsGeneratorUnitTest\AppSettingsGeneratorUnitTest.csproj", "{E000D976-5ED4-44A3-83BF-E5685F37100E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppSettingsGeneratorDemo", "AppSettingsGeneratorDemo\AppSettingsGeneratorDemo.csproj", "{99E5C5BE-7862-4F38-91AB-33400AAD069D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{97B4DE17-B6E8-4641-846B-20D219AB4DE8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{97B4DE17-B6E8-4641-846B-20D219AB4DE8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{97B4DE17-B6E8-4641-846B-20D219AB4DE8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{97B4DE17-B6E8-4641-846B-20D219AB4DE8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E000D976-5ED4-44A3-83BF-E5685F37100E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E000D976-5ED4-44A3-83BF-E5685F37100E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E000D976-5ED4-44A3-83BF-E5685F37100E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E000D976-5ED4-44A3-83BF-E5685F37100E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{99E5C5BE-7862-4F38-91AB-33400AAD069D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99E5C5BE-7862-4F38-91AB-33400AAD069D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99E5C5BE-7862-4F38-91AB-33400AAD069D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{99E5C5BE-7862-4F38-91AB-33400AAD069D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
