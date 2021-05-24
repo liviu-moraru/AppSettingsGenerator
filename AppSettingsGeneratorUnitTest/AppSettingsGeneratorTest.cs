@@ -41,13 +41,15 @@ namespace AppSettingsGeneratorUnitTest
             Compilation inputCompilation = CreateCompilation(@"
 using System;
 using System.ComponentModel;
+using AppSettingsGeneratorUnitTest;
 {
 public class Program 
 {
      public static void Main(string[] args)
     {
         var rc = new additiv.Caching.Redis.RedisConfiguration();
-        var evo = new AppSettingsGeneratorUnitTest.EvoPdfConfiguration();
+        var evo = new EvoPdfConfiguration();
+        var hc = new HostConfiguration();
     }
 }
  

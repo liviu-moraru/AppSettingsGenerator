@@ -9,6 +9,12 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace AppSettingsGenerator
 {
+    public class ConfigurationClassDescription
+    {
+        public string ClassName { get; set; }
+        public string Namespace { get; set; }
+        public Dictionary<string, PropertyTypeDescription> Properties { get; set; }
+    }
 
     public class PropertyTypeDescription
     {
@@ -29,24 +35,79 @@ namespace AppSettingsGenerator
 
         public void Execute(GeneratorExecutionContext context)
         {
+            bool BuildHostConfiguration(Dictionary<string, ConfigurationClassDescription> configurationClassDescriptions, ref StringBuilder stringBuilder)
+            {
+                // Search HostConfiguration description
+                if (!configurationClassDescriptions.ContainsKey("Host"))
+                {
+                    return false;
+                }
+
+                var ns = configurationClassDescriptions["Host"].Namespace;
+
+                var uns = new List<string>();
+                var nsb = new StringBuilder();
+                foreach (var tcd in configurationClassDescriptions)
+                {
+
+                    var tns = tcd.Value.Namespace;
+                    if (tcd.Key == "Host" || tns == ns) continue;
+                    if (!uns.Contains(tns))
+                    {
+                        uns.Add(tns);
+                        nsb.Append($"using {tns};\n");
+                    }
+                }
+
+                stringBuilder = new StringBuilder($@"
+{nsb.ToString()}
+namespace {ns}
+{{
+    public partial class HostConfiguration
+    {{
+
+");
+
+                foreach (var tcd in configurationClassDescriptions)
+                {
+                    if (tcd.Key == "Host") continue;
+                    var tcl = tcd.Value.ClassName;
+                    var indent = 8;
+                    stringBuilder.Append(' ', indent);
+                    stringBuilder.AppendLine($"public {tcd.Value.ClassName} {tcd.Key} {{ get; set }}");
+                }
+
+                stringBuilder.AppendLine($@"
+    }}
+}}
+");
+                return true;
+            }
 
             //Debugger.Launch();
-            void CheckConfiguration(Dictionary<string, Dictionary<string, PropertyTypeDescription>> dictionary, List<KeyValuePair<string, object>> keyValuePairs, List<string> list)
+            void CheckConfiguration(Dictionary<string, ConfigurationClassDescription> configClassDescription,
+                List<KeyValuePair<string, object>> keyValuePairs, List<string> list)
             {
-                foreach (var classInfo in dictionary)
+                foreach (var classDescription in configClassDescription)
                 {
                     // <classKey>Configuration is an existing class in the project
-                    var classKey = classInfo.Key;
+                    var classKey = classDescription.Key;
+                    if (classKey == "Host")
+                    {
+                        continue;
+                    }
+
                     if (keyValuePairs.All(x => x.Key != classKey))
                     {
                         list.Add($"Configuration for class {classKey} not found in json file.");
                         continue;
                     }
 
-                    var configProperties = (Dictionary<string, object>) keyValuePairs.First(x => x.Key == classKey).Value;
-                    // classProperties is a KeyValuePair<string, PropertyTypeDescription>, where the key is the name of the property of the <<classKey>Configuration class
+                    var configProperties =
+                        (Dictionary<string, object>) keyValuePairs.First(x => x.Key == classKey).Value;
 
-                    foreach (var classProperty in classInfo.Value)
+
+                    foreach (var classProperty in classDescription.Value.Properties)
                     {
                         var classPropertyName = classProperty.Key;
 
@@ -60,7 +121,8 @@ namespace AppSettingsGenerator
                             if (
                                 (configType == JsonValueKind.False && !(classPropertyDescription.Name == "Boolean" ||
                                                                         classPropertyDescription.IsNullable &&
-                                                                        classPropertyDescription.FullName == "bool?")) ||
+                                                                        classPropertyDescription.FullName ==
+                                                                        "bool?")) ||
                                 (configType == JsonValueKind.Number && !(classPropertyDescription.Name == "Int32" ||
                                                                          classPropertyDescription.IsNullable &&
                                                                          classPropertyDescription.FullName ==
@@ -104,17 +166,21 @@ namespace AppSettingsGenerator
 
             if (errors.Any())
             {
-
                 context.ReportDiagnostic(Diagnostic.Create(
                     new DiagnosticDescriptor(
                         "ID1",
                         "Errors in generator",
-                       "Generator errors: {0}",
+                        "Generator errors: {0}",
                         "Cat1",
                         DiagnosticSeverity.Error,
                         true), Location.None, JsonSerializer.Serialize(errors)));
                 return;
             }
+
+            var sb = new StringBuilder();
+            if (!BuildHostConfiguration(existingClassInfo, ref sb)) return;
+            context.AddSource($"Host.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+            return;
             var configSectionClasses = new StringBuilder();
 
             foreach (var configClazz in separateConfigClasses)
@@ -176,16 +242,14 @@ namespace ApplicationConfig
 
             context.AddSource("MyAppConfig",
                 SourceText.From($"/*{appsettingsContent}*/" + sourceBuilder.ToString(), Encoding.UTF8));
-
-
         }
 
-        private Dictionary<string, Dictionary<string, PropertyTypeDescription>> LoadConfigurationClassInfo(
+        private Dictionary<string, ConfigurationClassDescription> LoadConfigurationClassInfo(
             GeneratorExecutionContext context)
         {
             var compilation = context.Compilation;
-            Dictionary<string, Dictionary<string, PropertyTypeDescription>>
-                result = new Dictionary<string, Dictionary<string, PropertyTypeDescription>>();
+            Dictionary<string, ConfigurationClassDescription>
+                result = new Dictionary<string, ConfigurationClassDescription>();
             foreach (var syntaxTree in compilation.SyntaxTrees)
             {
                 var sm = compilation.GetSemanticModel(syntaxTree);
@@ -200,8 +264,12 @@ namespace ApplicationConfig
 
                     if (!String.IsNullOrWhiteSpace(typeNameWithoutSuffix) && !result.ContainsKey(typeNameWithoutSuffix))
                     {
+                        var classDescription = new ConfigurationClassDescription();
+                        result.Add(typeNameWithoutSuffix, classDescription);
+                        classDescription.ClassName = typeName;
+                        classDescription.Namespace = typeInfo.Type.ContainingNamespace.ToDisplayString();
                         var members = new Dictionary<string, PropertyTypeDescription>();
-                        result.Add(typeNameWithoutSuffix, members);
+                        classDescription.Properties = members;
                         foreach (var member in typeInfo.Type.GetMembers())
                         {
                             if (member is IMethodSymbol methodSymbol &&
