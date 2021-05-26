@@ -1,4 +1,4 @@
-namespace AppSettingsGeneratorUnitTest
+namespace AppSettingsGeneratorDemo
 {
     public partial class HostConfiguration
     {

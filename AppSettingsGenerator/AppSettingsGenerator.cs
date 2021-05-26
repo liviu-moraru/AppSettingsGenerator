@@ -35,7 +35,9 @@ namespace AppSettingsGenerator
 
         public void Execute(GeneratorExecutionContext context)
         {
-            bool BuildHostConfiguration(Dictionary<string, ConfigurationClassDescription> configurationClassDescriptions, ref StringBuilder stringBuilder)
+            bool BuildHostConfiguration(
+                Dictionary<string, ConfigurationClassDescription> configurationClassDescriptions,
+                ref StringBuilder stringBuilder)
             {
                 // Search HostConfiguration description
                 if (!configurationClassDescriptions.ContainsKey("Host"))
@@ -74,7 +76,7 @@ namespace {ns}
                     var tcl = tcd.Value.ClassName;
                     var indent = 8;
                     stringBuilder.Append(' ', indent);
-                    stringBuilder.AppendLine($"public {tcd.Value.ClassName} {tcd.Key} {{ get; set }}");
+                    stringBuilder.AppendLine($"public {tcd.Value.ClassName} {tcd.Key} {{ get; set; }}");
                 }
 
                 stringBuilder.AppendLine($@"
@@ -84,9 +86,43 @@ namespace {ns}
                 return true;
             }
 
+            bool BuildHostConfigurationExtensions(
+                Dictionary<string, ConfigurationClassDescription> configurationClassDescriptions,
+                ref StringBuilder stringBuilder)
+            {
+                // Search HostConfiguration description
+                if (!configurationClassDescriptions.ContainsKey("Host"))
+                {
+                    return false;
+                }
+
+                var ns = configurationClassDescriptions["Host"].Namespace;
+
+                stringBuilder = new StringBuilder($@"
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace {ns}
+{{
+    public static class HostConfigurationExtensions
+    {{
+                public static HostConfiguration AddHostConfiguration(this IServiceCollection services, IConfiguration configuration)
+                {{
+                    var hostConfigurationSection = configuration?.GetSection(""Host"");
+                    services.Configure<HostConfiguration>(hostConfigurationSection);
+                    return hostConfigurationSection.Get<HostConfiguration>();
+                }}
+    }}
+}}
+
+");
+                return true;
+            }
+
+
             //Debugger.Launch();
             void CheckConfiguration(Dictionary<string, ConfigurationClassDescription> configClassDescription,
-                List<KeyValuePair<string, object>> keyValuePairs, List<string> list)
+                Dictionary<string, object> keyValuePairs, List<string> list)
             {
                 foreach (var classDescription in configClassDescription)
                 {
@@ -157,12 +193,13 @@ namespace {ns}
             var separateConfigClasses =
                 configurationDictionary.Except(topLevelProperties)
                     .ToList();
-
+            var conf = separateConfigClasses.FirstOrDefault(c => c.Key == "Host");
+            var xc= (Dictionary<string, object>)conf.Value;
             var existingClassInfo = LoadConfigurationClassInfo(context);
 
             var errors = new List<string>();
 
-            CheckConfiguration(existingClassInfo, separateConfigClasses, errors);
+            CheckConfiguration(existingClassInfo, xc, errors);
 
             if (errors.Any())
             {
@@ -180,6 +217,8 @@ namespace {ns}
             var sb = new StringBuilder();
             if (!BuildHostConfiguration(existingClassInfo, ref sb)) return;
             context.AddSource($"Host.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+            if (!BuildHostConfigurationExtensions(existingClassInfo, ref sb)) return;
+            context.AddSource($"HostConfigurationExtensions.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
             return;
             var configSectionClasses = new StringBuilder();
 
@@ -255,7 +294,7 @@ namespace ApplicationConfig
                 var sm = compilation.GetSemanticModel(syntaxTree);
                 var root = syntaxTree.GetRoot();
                 foreach (var typeInfo in root.DescendantNodesAndSelf().Select(x => sm.GetTypeInfo(x))
-                    .Where(t => t.Type != null && t.Type.Name.EndsWith("Configuration")))
+                    .Where(t => t.Type != null && t.Type.Name.EndsWith("Configuration") && t.Type.TypeKind == TypeKind.Class ))
                 {
                     var typeName = typeInfo.Type?.Name;
 

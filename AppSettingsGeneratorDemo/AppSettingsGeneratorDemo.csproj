@@ -11,16 +11,13 @@
 
     <ItemGroup>
         <PackageReference Include="additiv.Caching.Redis" Version="2.5.0-develop0013" />
-      <PackageReference Include="Microsoft.Net.Compilers.Toolset" Version="3.9.0">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      
-      
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="5.0.0" />
     </ItemGroup>
 
     <ItemGroup>
-        <AdditionalFiles Include="appsettings.json" />
+        <AdditionalFiles Include="appsettings.json">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </AdditionalFiles>
     </ItemGroup>
     <PropertyGroup>
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
