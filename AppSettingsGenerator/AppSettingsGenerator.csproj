@@ -21,6 +21,9 @@
     </PropertyGroup>
 
     <Target Name="TestMessage" AfterTargets="Build">
-        <Message Text="Finished Build!!!!! = $(PKGSystem_Text_Json)\lib\netstandard2.0\System.Text.Json.dll" />
+        <Message Text="Finished Build = $(PKGSystem_Text_Json)\lib\netstandard2.0\System.Text.Json.dll" />
     </Target>
+    <ItemGroup>
+        <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    </ItemGroup>
 </Project>
