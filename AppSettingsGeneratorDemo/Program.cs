@@ -15,6 +15,7 @@ namespace AppSettingsGeneratorDemo
         {
             IHost host;
             var rc = new RedisConfiguration();
+            var ev = new EvoPdfConfiguration();
             host = AppStartup();
             var hc = host.Services.GetRequiredService<HostConfiguration>();
         }

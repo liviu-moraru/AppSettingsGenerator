@@ -50,6 +50,7 @@ public class Program
         var rc = new additiv.Caching.Redis.RedisConfiguration();
         var evo = new EvoPdfConfiguration();
         var hc = new HostConfiguration();
+        var ec = new EmptyConfiguration();
     }
 }
  
@@ -81,8 +82,16 @@ public class Program
             }
             else
             {
-                string sourceGenerated = runResult.Results[0].GeneratedSources[0].SourceText.ToString() ?? string.Empty;
-                _outputHelper.WriteLine(sourceGenerated);
+                foreach (var result in runResult.Results)
+                {
+                    foreach (var generatedSource in result.GeneratedSources)
+                    {
+                        string sourceGenerated = generatedSource.SourceText.ToString() ?? string.Empty;
+                        _outputHelper.WriteLine(sourceGenerated);
+                    }
+
+                }
+
             }
 
 

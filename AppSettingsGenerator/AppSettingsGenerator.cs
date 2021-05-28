@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -24,6 +23,8 @@ namespace AppSettingsGenerator
         public string FullName { get; set; }
         public string Name { get; set; }
         public string TypeArgumentName { get; set; }
+
+        public bool IsRequired { get; set; }
     }
 
     [Generator]
@@ -51,7 +52,6 @@ namespace AppSettingsGenerator
                 var nsb = new StringBuilder();
                 foreach (var tcd in configurationClassDescriptions)
                 {
-
                     var tns = tcd.Value.Namespace;
                     if (tcd.Key == "Host" || tns == ns) continue;
                     if (!uns.Contains(tns))
@@ -62,7 +62,7 @@ namespace AppSettingsGenerator
                 }
 
                 stringBuilder = new StringBuilder($@"
-{nsb.ToString()}
+{nsb}
 namespace {ns}
 {{
     public partial class HostConfiguration
@@ -73,7 +73,6 @@ namespace {ns}
                 foreach (var tcd in configurationClassDescriptions)
                 {
                     if (tcd.Key == "Host") continue;
-                    var tcl = tcd.Value.ClassName;
                     var indent = 8;
                     stringBuilder.Append(' ', indent);
                     stringBuilder.AppendLine($"public {tcd.Value.ClassName} {tcd.Key} {{ get; set; }}");
@@ -122,7 +121,7 @@ namespace {ns}
 
             //Debugger.Launch();
             void CheckConfiguration(Dictionary<string, ConfigurationClassDescription> configClassDescription,
-                Dictionary<string, object> keyValuePairs, List<string> list)
+                Dictionary<string, object> appSettingsInfo, List<string> list)
             {
                 foreach (var classDescription in configClassDescription)
                 {
@@ -133,14 +132,17 @@ namespace {ns}
                         continue;
                     }
 
-                    if (keyValuePairs.All(x => x.Key != classKey))
+                    var fullClassName = $"{classDescription.Value.Namespace}.{classDescription.Value.ClassName}";
+
+                    if (appSettingsInfo.All(x => x.Key != classKey))
                     {
-                        list.Add($"Configuration for class {classKey} not found in json file.");
+                        list.Add(
+                            $"Configuration for class {fullClassName} not found in json file.");
                         continue;
                     }
 
                     var configProperties =
-                        (Dictionary<string, object>) keyValuePairs.First(x => x.Key == classKey).Value;
+                        (Dictionary<string, object>) appSettingsInfo.First(x => x.Key == classKey).Value;
 
 
                     foreach (var classProperty in classDescription.Value.Properties)
@@ -153,7 +155,8 @@ namespace {ns}
                         if (configProperties.ContainsKey(classPropertyName))
                         {
                             var configProperty = configProperties.First(x => x.Key == classPropertyName);
-                            var configType = ((JsonElement) configProperty.Value).ValueKind;
+                            var jsonElement = (JsonElement) configProperty.Value;
+                            var configType = jsonElement.ValueKind;
                             if (
                                 (configType == JsonValueKind.False && !(classPropertyDescription.Name == "Boolean" ||
                                                                         classPropertyDescription.IsNullable &&
@@ -163,16 +166,28 @@ namespace {ns}
                                                                          classPropertyDescription.IsNullable &&
                                                                          classPropertyDescription.FullName ==
                                                                          "int?")) ||
-                                (configType == JsonValueKind.String && classPropertyDescription.Name != "String")
+                                (configType == JsonValueKind.String && classPropertyDescription.Name != "String" &&
+                                 classPropertyDescription.Name != "Guid")
                             )
                             {
                                 list.Add(
-                                    $"Class {classKey}, Property: {classPropertyName}. The field must be of tyoe {classPropertyDescription.FullName}");
+                                    $"Class {classKey}, Property: {classPropertyName}. The field must be of type {classPropertyDescription.FullName}");
+                            }
+                            else
+                            {
+                                if (configType == JsonValueKind.String &&
+                                    string.IsNullOrWhiteSpace(jsonElement.GetString()) &&
+                                    (classPropertyDescription.IsRequired || classPropertyDescription.Name == "Guid"))
+                                {
+                                    list.Add(
+                                        $"Class {classKey}, Property: {classPropertyName}. The field must not be empty");
+                                }
                             }
                         }
                         else
                         {
-                            if (classPropertyDescription.IsValueType && !classPropertyDescription.IsNullable)
+                            if ((classPropertyDescription.IsValueType && !classPropertyDescription.IsNullable) ||
+                                classPropertyDescription.IsRequired)
                             {
                                 list.Add(
                                     $"Class {classKey}, Property: {classPropertyName}. The field must be present in the configuration file.");
@@ -193,13 +208,22 @@ namespace {ns}
             var separateConfigClasses =
                 configurationDictionary.Except(topLevelProperties)
                     .ToList();
-            var conf = separateConfigClasses.FirstOrDefault(c => c.Key == "Host");
-            var xc= (Dictionary<string, object>)conf.Value;
+            Dictionary<string, object> configInfo;
+            if (separateConfigClasses.Any(c => c.Key == "Host"))
+            {
+                var conf = separateConfigClasses.First(c => c.Key == "Host");
+                configInfo = (Dictionary<string, object>) conf.Value;
+            }
+            else
+            {
+                configInfo = new Dictionary<string, object>();
+            }
+
             var existingClassInfo = LoadConfigurationClassInfo(context);
 
             var errors = new List<string>();
 
-            CheckConfiguration(existingClassInfo, xc, errors);
+            CheckConfiguration(existingClassInfo, configInfo, errors);
 
             if (errors.Any())
             {
@@ -294,7 +318,8 @@ namespace ApplicationConfig
                 var sm = compilation.GetSemanticModel(syntaxTree);
                 var root = syntaxTree.GetRoot();
                 foreach (var typeInfo in root.DescendantNodesAndSelf().Select(x => sm.GetTypeInfo(x))
-                    .Where(t => t.Type != null && t.Type.Name.EndsWith("Configuration") && t.Type.TypeKind == TypeKind.Class ))
+                    .Where(t => t.Type != null && t.Type.Name.EndsWith("Configuration") &&
+                                t.Type.TypeKind == TypeKind.Class))
                 {
                     var typeName = typeInfo.Type?.Name;
 
@@ -303,32 +328,44 @@ namespace ApplicationConfig
 
                     if (!String.IsNullOrWhiteSpace(typeNameWithoutSuffix) && !result.ContainsKey(typeNameWithoutSuffix))
                     {
-                        var classDescription = new ConfigurationClassDescription();
-                        result.Add(typeNameWithoutSuffix, classDescription);
-                        classDescription.ClassName = typeName;
-                        classDescription.Namespace = typeInfo.Type.ContainingNamespace.ToDisplayString();
-                        var members = new Dictionary<string, PropertyTypeDescription>();
-                        classDescription.Properties = members;
-                        foreach (var member in typeInfo.Type.GetMembers())
+                        var mbrs = typeInfo.Type.GetMembers().Where(t =>
+                            t.GetType().GetInterfaces().Contains(typeof(IPropertySymbol)));
+                        if (mbrs.Any())
                         {
-                            if (member is IMethodSymbol methodSymbol &&
-                                methodSymbol.MethodKind == MethodKind.PropertyGet &&
-                                methodSymbol.ReturnType is INamedTypeSymbol returnType
-                            )
-                            {
-                                var name = methodSymbol.Name.Split('_')[1];
-                                var propType = new PropertyTypeDescription();
-                                propType.IsValueType = returnType.IsValueType;
-                                propType.IsGenericType = returnType.IsGenericType;
-                                propType.FullName = returnType.ToString();
-                                propType.IsNullable = returnType.Name == "Nullable";
-                                if (returnType.IsGenericType)
-                                {
-                                    propType.TypeArgumentName = returnType.TypeArguments.First().Name;
-                                }
+                            var classDescription = new ConfigurationClassDescription();
+                            result.Add(typeNameWithoutSuffix, classDescription);
+                            classDescription.ClassName = typeName;
+                            classDescription.Namespace = typeInfo.Type.ContainingNamespace.ToDisplayString();
+                            var members = new Dictionary<string, PropertyTypeDescription>();
+                            classDescription.Properties = members;
 
-                                propType.Name = returnType.Name;
-                                members.Add(name, propType);
+                            foreach (var symbol in mbrs)
+                            {
+                                var member = (IPropertySymbol) symbol;
+                                if (member.Type is INamedTypeSymbol returnType)
+                                {
+                                    var name = member.Name;
+                                    var propType = new PropertyTypeDescription();
+                                    propType.IsValueType = returnType.IsValueType;
+                                    propType.IsGenericType = returnType.IsGenericType;
+                                    propType.FullName = returnType.ToString();
+                                    propType.IsNullable = returnType.Name == "Nullable";
+                                    if (returnType.IsGenericType)
+                                    {
+                                        propType.TypeArgumentName = returnType.TypeArguments.First().Name;
+                                    }
+
+                                    var attributes = member.GetAttributes();
+                                    if (
+                                        attributes.FirstOrDefault(a =>
+                                            a?.AttributeClass?.Name == "RequiredAttribute") != null)
+                                    {
+                                        propType.IsRequired = true;
+                                    }
+
+                                    propType.Name = returnType.Name;
+                                    members.Add(name, propType);
+                                }
                             }
                         }
                     }
@@ -363,7 +400,8 @@ namespace ApplicationConfig
                     }
                     else
                     {
-                        sb.AppendLine($"\t\tpublic {propertyType} {NormalizePropertyName(item.Key)} {{ get; set; }}");
+                        sb.AppendLine(
+                            $"\t\tpublic {propertyType} {NormalizePropertyName(item.Key)} {{ get; set; }}");
                     }
                 }
             }
